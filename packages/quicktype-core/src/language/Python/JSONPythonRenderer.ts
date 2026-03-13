@@ -195,10 +195,6 @@ export class JSONPythonRenderer extends PythonRenderer {
     private _haveDateutil = false;
 
     protected emitTypeVar(tvar: string, constraints: Sourcelike): void {
-        if (!this.pyOptions.features.typeHints) {
-            return;
-        }
-
         this.emitLine(
             tvar,
             " = ",
@@ -231,10 +227,6 @@ export class JSONPythonRenderer extends PythonRenderer {
     }
 
     protected cast(type: Sourcelike, v: Sourcelike): Sourcelike {
-        if (!this.pyOptions.features.typeHints) {
-            return v;
-        }
-
         return [this.withTyping("cast"), "(", type, ", ", v, ")"];
     }
 

@@ -127,31 +127,21 @@ export class PythonRenderer extends ConvenienceRenderer {
     }
 
     protected withImport(module: string, name: string): Sourcelike {
-        if (this.pyOptions.features.typeHints || module !== "typing") {
-            // FIXME: This is ugly.  We should rather not generate that import in the first
-            // place, but right now we just make the type source and then throw it away.  It's
-            // not a performance issue, so it's fine, I just bemoan this special case, and
-            // potential others down the road.
-            mapUpdateInto(this.imports, module, (s) =>
-                s ? setUnionInto(s, [name]) : new Set([name]),
-            );
-        }
-
+        mapUpdateInto(this.imports, module, (s) =>
+            s ? setUnionInto(s, [name]) : new Set([name]),
+        );
         return name;
     }
 
     protected withTyping(name: string): Sourcelike {
-        // Built-in generic aliases (list[str] etc.) are only available from Python 3.9+
-        if (this.pyOptions.features.builtinGenerics) {
-            const builtins: Record<string, string> = {
-                List: "list",
-                Dict: "dict",
-                Tuple: "tuple",
-                Type: "type",
-            };
-            if (name in builtins) {
-                return builtins[name];
-            }
+        const builtins: Record<string, string> = {
+            List: "list",
+            Dict: "dict",
+            Tuple: "tuple",
+            Type: "type",
+        };
+        if (name in builtins) {
+            return builtins[name];
         }
 
         return this.withImport("typing", name);
@@ -198,8 +188,6 @@ export class PythonRenderer extends ConvenienceRenderer {
                     const rest: string[] = [];
                     if (
                         !this.getAlphabetizeProperties() &&
-                        (this.pyOptions.features.dataClasses ||
-                            this.pyOptions.pydanticBaseModel) &&
                         _isRootTypeDef
                     ) {
                         // Only push "= None" if this is a root level type def
@@ -300,43 +288,12 @@ export class PythonRenderer extends ConvenienceRenderer {
         this.declaredTypes.add(t);
     }
 
-    protected emitClassMembers(t: ClassType): void {
-        if (
-            this.pyOptions.features.dataClasses ||
-            this.pyOptions.pydanticBaseModel
-        )
-            return;
-
-        const args: Sourcelike[] = [];
-        this.forEachClassProperty(t, "none", (name, _, cp) => {
-            args.push([name, this.typeHint(": ", this.pythonType(cp.type))]);
-        });
-        this.emitBlock(
-            [
-                "def __init__(self, ",
-                arrayIntercalate(", ", args),
-                ")",
-                this.typeHint(" -> None"),
-                ":",
-            ],
-            () => {
-                if (args.length === 0) {
-                    this.emitLine("pass");
-                } else {
-                    this.forEachClassProperty(t, "none", (name) => {
-                        this.emitLine("self.", name, " = ", name);
-                    });
-                }
-            },
-        );
+    protected emitClassMembers(_t: ClassType): void {
+        if (!this.pyOptions.pydanticBaseModel) return;
     }
 
     protected typeHint(...sl: Sourcelike[]): Sourcelike {
-        if (this.pyOptions.features.typeHints) {
-            return sl;
-        }
-
-        return [];
+        return sl;
     }
 
     protected typingDecl(name: Sourcelike, type: string): Sourcelike {
@@ -349,58 +306,45 @@ export class PythonRenderer extends ConvenienceRenderer {
 
     protected sortClassProperties(
         properties: ReadonlyMap<string, ClassProperty>,
-        propertyNames: ReadonlyMap<string, Name>,
+        _propertyNames: ReadonlyMap<string, Name>,
     ): ReadonlyMap<string, ClassProperty> {
-        if (
-            this.pyOptions.features.dataClasses ||
-            this.pyOptions.pydanticBaseModel
-        ) {
-            return mapSortBy(properties, (p: ClassProperty) => {
-                return (p.type instanceof UnionType &&
-                    nullableFromUnion(p.type) != null) ||
-                    p.isOptional
-                    ? 1
-                    : 0;
-            });
-        }
-
-        return super.sortClassProperties(properties, propertyNames);
+        return mapSortBy(properties, (p: ClassProperty) => {
+            return (p.type instanceof UnionType &&
+                nullableFromUnion(p.type) != null) ||
+                p.isOptional
+                ? 1
+                : 0;
+        });
     }
 
     protected emitClass(t: ClassType): void {
-        if (
-            this.pyOptions.features.dataClasses &&
-            !this.pyOptions.pydanticBaseModel
-        ) {
+        if (!this.pyOptions.pydanticBaseModel) {
             this.emitLine("@", this.withImport("dataclasses", "dataclass"));
         }
 
         this.declareType(t, () => {
-            if (this.pyOptions.features.typeHints) {
-                if (t.getProperties().size === 0) {
-                    this.emitLine("pass");
-                } else {
-                    this.forEachClassProperty(
-                        t,
-                        "none",
-                        (name, jsonName, cp) => {
-                            this.emitLine(
-                                name,
-                                this.typeHint(
-                                    ": ",
-                                    this.pythonType(cp.type, true),
-                                ),
-                            );
-                            this.emitDescription(
-                                this.descriptionForClassProperty(t, jsonName),
-                            );
-                        },
-                    );
-                }
-
-                this.ensureBlankLine();
+            if (t.getProperties().size === 0) {
+                this.emitLine("pass");
+            } else {
+                this.forEachClassProperty(
+                    t,
+                    "none",
+                    (name, jsonName, cp) => {
+                        this.emitLine(
+                            name,
+                            this.typeHint(
+                                ": ",
+                                this.pythonType(cp.type, true),
+                            ),
+                        );
+                        this.emitDescription(
+                            this.descriptionForClassProperty(t, jsonName),
+                        );
+                    },
+                );
             }
 
+            this.ensureBlankLine();
             this.emitClassMembers(t);
         });
     }

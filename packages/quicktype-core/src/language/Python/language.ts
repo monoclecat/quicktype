@@ -20,9 +20,6 @@ import { JSONPythonRenderer } from "./JSONPythonRenderer";
 import { PythonRenderer } from "./PythonRenderer";
 
 export interface PythonFeatures {
-    dataClasses: boolean;
-    typeHints: boolean;
-    builtinGenerics: boolean;
     unionSyntax: boolean;
 }
 
@@ -31,16 +28,12 @@ export const pythonOptions = {
         "python-version",
         "Python version",
         {
-            "3.5": { typeHints: false, dataClasses: false, builtinGenerics: false, unionSyntax: false },
-            "3.6": { typeHints: true, dataClasses: false, builtinGenerics: false, unionSyntax: false },
-            "3.7": { typeHints: true, dataClasses: true, builtinGenerics: false, unionSyntax: false },
-            "3.8": { typeHints: true, dataClasses: true, builtinGenerics: false, unionSyntax: false },
-            "3.9": { typeHints: true, dataClasses: true, builtinGenerics: true, unionSyntax: false },
-            "3.10": { typeHints: true, dataClasses: true, builtinGenerics: true, unionSyntax: true },
-            "3.11": { typeHints: true, dataClasses: true, builtinGenerics: true, unionSyntax: true },
-            "3.12": { typeHints: true, dataClasses: true, builtinGenerics: true, unionSyntax: true },
-            "3.13": { typeHints: true, dataClasses: true, builtinGenerics: true, unionSyntax: true },
-            "3.14": { typeHints: true, dataClasses: true, builtinGenerics: true, unionSyntax: true },
+            "3.9": { unionSyntax: false },
+            "3.10": { unionSyntax: true },
+            "3.11": { unionSyntax: true },
+            "3.12": { unionSyntax: true },
+            "3.13": { unionSyntax: true },
+            "3.14": { unionSyntax: true },
         },
         "3.11",
     ),
