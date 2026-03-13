@@ -141,6 +141,19 @@ export class PythonRenderer extends ConvenienceRenderer {
     }
 
     protected withTyping(name: string): Sourcelike {
+        // Built-in generic aliases (list[str] etc.) are only available from Python 3.9+
+        if (this.pyOptions.features.builtinGenerics) {
+            const builtins: Record<string, string> = {
+                List: "list",
+                Dict: "dict",
+                Tuple: "tuple",
+                Type: "type",
+            };
+            if (name in builtins) {
+                return builtins[name];
+            }
+        }
+
         return this.withImport("typing", name);
     }
 
@@ -195,6 +208,15 @@ export class PythonRenderer extends ConvenienceRenderer {
                         rest.push(" = None");
                     }
 
+                    if (this.pyOptions.features.unionSyntax) {
+                        // Python 3.10+: X | Y | None
+                        return [
+                            arrayIntercalate(" | ", memberTypes),
+                            " | None",
+                            ...rest,
+                        ];
+                    }
+
                     if (nonNulls.size > 1) {
                         this.withImport("typing", "Union");
                         return [
@@ -213,6 +235,11 @@ export class PythonRenderer extends ConvenienceRenderer {
                         "]",
                         ...rest,
                     ];
+                }
+
+                if (this.pyOptions.features.unionSyntax) {
+                    // Python 3.10+: X | Y
+                    return [arrayIntercalate(" | ", memberTypes)];
                 }
 
                 return [
