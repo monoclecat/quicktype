@@ -42,7 +42,7 @@ export const pythonOptions = {
             "3.13": { typeHints: true, dataClasses: true, builtinGenerics: true, unionSyntax: true },
             "3.14": { typeHints: true, dataClasses: true, builtinGenerics: true, unionSyntax: true },
         },
-        "3.6",
+        "3.11",
     ),
     justTypes: new BooleanOption("just-types", "Classes only", false),
     nicePropertyNames: new BooleanOption(
