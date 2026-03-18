@@ -11,7 +11,8 @@
         "noUnusedParameters": true,
         "noFallthroughCasesInSwitch": true,
         "esModuleInterop": true,
-        "baseUrl": "src"
+        "baseUrl": "src",
+        "types": ["node"]
     },
     "include": ["src"]
 }
