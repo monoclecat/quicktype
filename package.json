@@ -67,11 +67,8 @@
         "watch": "^1.0.2"
     },
     "overrides": {
-        "cross-fetch": {
-            "node-fetch": {
-                "whatwg-url": "^13.0.0"
-            }
-        }
+        "js-base64": "^3.7.7",
+        "whatwg-url": "^13.0.0"
     },
     "files": ["dist"],
     "bin": "dist/index.js"
