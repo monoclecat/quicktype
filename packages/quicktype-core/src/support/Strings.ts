@@ -368,6 +368,9 @@ const fastNonLetter = precomputedCodePointPredicate(
 const fastIsDigit = precomputedCodePointPredicate(isDigit);
 
 export function splitIntoWords(s: string): WordInName[] {
+    if (typeof s !== "string") {
+        s = String(s);
+    }
     // [start, end, allUpper]
     const intervals: Array<[number, number, boolean]> = [];
     let intervalStart: number | undefined = undefined;

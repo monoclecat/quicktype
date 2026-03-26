@@ -73,6 +73,10 @@ export function sourcelikeToSource(sl: Sourcelike): Source {
         };
     }
 
+    if (typeof sl === "boolean" || typeof sl === "number") {
+        return { kind: "text", text: String(sl) };
+    }
+
     if (typeof sl === "string") {
         const lines = sl.split("\n");
         if (lines.length === 1) {
