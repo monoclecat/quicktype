@@ -5,6 +5,7 @@ import {
     combineTypeAttributes,
     emptyTypeAttributes,
 } from "./attributes/TypeAttributes";
+import { namesTypeAttributeKind } from "./attributes/TypeNames";
 import type {
     BaseGraphRewriteBuilder,
     GraphRewriteBuilder,
@@ -161,6 +162,30 @@ export class UnifyUnionBuilder extends UnionBuilder<
         const objectTypes = objectRefs.map((r) =>
             assertIsObject(derefTypeRef(r, this.typeBuilder)),
         );
+
+        // If all objects have distinct explicit schema titles (distance === 0),
+        // preserve them as separate union members instead of merging.
+        const explicitTitles = new Set<string>();
+        let allHaveExplicitTitles = true;
+        for (const o of objectTypes) {
+            const names = namesTypeAttributeKind.tryGetInAttributes(o.getAttributes());
+            if (names === undefined || names.areInferred) {
+                allHaveExplicitTitles = false;
+                break;
+            }
+            explicitTitles.add(names.combinedName);
+        }
+        if (allHaveExplicitTitles && explicitTitles.size === objectTypes.length) {
+            const memberRefs = objectRefs.map((r) =>
+                this.typeBuilder.reconstituteTypeRef(r, emptyTypeAttributes),
+            );
+            return this.typeBuilder.getUnionType(
+                typeAttributes,
+                new Set(memberRefs),
+                forwardingRef,
+            );
+        }
+
         const {
             hasProperties,
             hasAdditionalProperties,

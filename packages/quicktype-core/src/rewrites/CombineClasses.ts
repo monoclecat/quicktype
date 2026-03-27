@@ -8,6 +8,7 @@ import {
     setOperationCasesEqual,
 } from "../Type/Type";
 import type { TypeGraph } from "../Type/TypeGraph";
+import { namesTypeAttributeKind } from "../attributes/TypeNames";
 import type { TypeRef } from "../Type/TypeRef";
 import {
     combineTypeAttributesOfTypes,
@@ -137,7 +138,14 @@ function findSimilarityCliques(
     const classCandidates = Array.from(
         graph.allNamedTypesSeparated().objects,
     ).filter(
-        (o) => o instanceof ClassType && (includeFixedClasses || !o.isFixed),
+        (o) => {
+            if (!(o instanceof ClassType)) return false;
+            if (!includeFixedClasses && o.isFixed) return false;
+            // Never merge classes that have an explicit schema title (distance === 0).
+            const typeNames = namesTypeAttributeKind.tryGetInAttributes(o.getAttributes());
+            if (typeNames !== undefined && !typeNames.areInferred) return false;
+            return true;
+        },
     ) as ClassType[];
     const cliques: Clique[] = [];
 

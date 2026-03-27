@@ -97,6 +97,44 @@ quicktype -s schema schema.json -o src/nodejs/Models.ts
 # seamlessly.
 ```
 
+### Preventing type merging with `title`
+
+quicktype normally merges structurally similar classes into a single type. For JSON Schema input, you can prevent this by setting a `title` on each object definition. Types with an explicit `title` are treated as distinct and will never be merged with other types, even if they share the same property names.
+
+```json
+{
+  "$defs": {
+    "MotionAttributes": {
+      "title": "MotionAttributes",
+      "type": "object",
+      "properties": {
+        "num": { "type": "array" },
+        "text": { "type": "array" }
+      }
+    },
+    "RoadAttributes": {
+      "title": "RoadAttributes",
+      "type": "object",
+      "properties": {
+        "num": { "type": "array" },
+        "text": { "type": "array" }
+      }
+    }
+  }
+}
+```
+
+Without `title`, these two definitions would be merged into a single class. With `title`, each produces its own class in the generated code.
+
+When titled types appear in a `oneOf`, they are preserved as union members:
+
+```python
+# Generated Python (with titles)
+vec: list[MotionVelocity | MotionAcceleration | BoundingBoxStdDev]
+
+# Without titles, these would be merged into a single class
+```
+
 ### Generating code from TypeScript (Experimental)
 
 You can achieve a similar result by writing or generating a [TypeScript](http://www.typescriptlang.org/) file, then quicktyping it. TypeScript is a typed superset of JavaScript with simple, succinct syntax for defining types:
