@@ -194,6 +194,69 @@ export function funPrefixNamer(name: string, nameStyle: NameStyle): Namer {
     return new Namer(name, nameStyle, funPrefixes);
 }
 
+export class ErrorOnCollisionNamer extends Namer {
+    public constructor(name: string, nameStyle: NameStyle) {
+        super(name, nameStyle, []);
+    }
+
+    public override assignNames(
+        names: ReadonlyMap<Name, string>,
+        forbiddenNamesIterable: Iterable<string>,
+        namesToAssignIterable: Iterable<Name>,
+    ): ReadonlyMap<Name, string> {
+        const forbiddenNames = new Set(forbiddenNamesIterable);
+        const namesToAssign = Array.from(namesToAssignIterable);
+        assert(
+            namesToAssign.length > 0,
+            "Number of names can't be less than 1",
+        );
+
+        const allAssignedNames = new Map<Name, string>();
+        for (const name of namesToAssign) {
+            const proposedNames = name.proposeUnstyledNames(names);
+            const namingFunction = name.namingFunction;
+            const maybeUniqueName = iterableFind(
+                proposedNames,
+                (proposed) =>
+                    !forbiddenNames.has(namingFunction.nameStyle(proposed)) &&
+                    namesToAssign.every(
+                        (n) =>
+                            n === name ||
+                            !n.proposeUnstyledNames(names).has(proposed),
+                    ),
+            );
+            if (maybeUniqueName !== undefined) {
+                const styledName = namingFunction.nameStyle(maybeUniqueName);
+                const assigned = name.nameAssignments(
+                    forbiddenNames,
+                    styledName,
+                );
+                if (assigned !== null) {
+                    mapMergeInto(allAssignedNames, assigned);
+                    setUnionInto(forbiddenNames, assigned.values());
+                    continue;
+                }
+            }
+
+            const originalName = defined(
+                iterableFirst(proposedNames),
+            );
+            return panic(
+                `Name collision for "${namingFunction.nameStyle(originalName)}": all schema types must have unique titles`,
+            );
+        }
+
+        return allAssignedNames;
+    }
+}
+
+export function errorOnCollisionNamer(
+    name: string,
+    nameStyle: NameStyle,
+): Namer {
+    return new ErrorOnCollisionNamer(name, nameStyle);
+}
+
 // FIXME: I think the type hierarchy is somewhat wrong here.  `FixedName`
 // should be a `Name`, but the non-fixed names should probably have their
 // own common superclass.  Most methods of `Name` make sense only either

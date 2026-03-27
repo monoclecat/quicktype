@@ -163,19 +163,17 @@ export class UnifyUnionBuilder extends UnionBuilder<
             assertIsObject(derefTypeRef(r, this.typeBuilder)),
         );
 
-        // If all objects have distinct explicit schema titles (distance === 0),
-        // preserve them as separate union members instead of merging.
+        // If any objects have explicit schema titles (distance === 0),
+        // preserve the entire union instead of merging — merging would
+        // erase the titled types' identities.
         const explicitTitles = new Set<string>();
-        let allHaveExplicitTitles = true;
         for (const o of objectTypes) {
             const names = namesTypeAttributeKind.tryGetInAttributes(o.getAttributes());
-            if (names === undefined || names.areInferred) {
-                allHaveExplicitTitles = false;
-                break;
+            if (names !== undefined && !names.areInferred) {
+                explicitTitles.add(names.combinedName);
             }
-            explicitTitles.add(names.combinedName);
         }
-        if (allHaveExplicitTitles && explicitTitles.size === objectTypes.length) {
+        if (explicitTitles.size > 0) {
             const memberRefs = objectRefs.map((r) =>
                 this.typeBuilder.reconstituteTypeRef(r, emptyTypeAttributes),
             );

@@ -23,7 +23,7 @@ import {
     transformationForType,
 } from "../../Transformers";
 import type { ClassType, Type } from "../../Type";
-import { matchType } from "../../Type/TypeUtils";
+import { matchType, removeNullFromUnion } from "../../Type/TypeUtils";
 
 import { PythonRenderer } from "./PythonRenderer";
 import { snakeNameStyle } from "./utils";
@@ -613,7 +613,7 @@ export class JSONPythonRenderer extends PythonRenderer {
             (_arrayType) => "List",
             (classType) => this.nameForNamedType(classType),
             (_mapType) => "dict",
-            (enumType) => this.nameForNamedType(enumType),
+            (enumType) => enumType.cases.size === 1 ? "str" : this.nameForNamedType(enumType),
             (_unionType) => undefined,
             (transformedStringType) => {
                 if (transformedStringType.kind === "date-time") {
@@ -819,12 +819,59 @@ export class JSONPythonRenderer extends PythonRenderer {
                     ")",
                 ]),
             (enumType) =>
-                compose(value, {
-                    lambda: singleWord(this.nameForNamedType(enumType)),
-                    value: undefined,
-                }),
+                enumType.cases.size === 1
+                    ? value
+                    : compose(value, {
+                          lambda: singleWord(this.nameForNamedType(enumType)),
+                          value: undefined,
+                      }),
             (unionType) => {
-                // FIXME: handle via transformers
+                const [hasNull, nonNulls] = removeNullFromUnion(unionType);
+                const discField = this.findDiscriminator(nonNulls);
+
+                if (discField !== undefined) {
+                    const entries = this.getDiscriminatorEntries(
+                        nonNulls,
+                        discField,
+                    );
+                    const mappingParts: Sourcelike[] = entries.map(
+                        ([constVal, memberType]) => [
+                            this.string(constVal),
+                            ": ",
+                            makeLambda(
+                                this.deserializer(identity, memberType),
+                            ).source,
+                        ],
+                    );
+                    if (hasNull !== null) {
+                        return compose(value, (v) => [
+                            "None if ",
+                            v,
+                            " is None else {",
+                            arrayIntercalate(", ", mappingParts),
+                            "}[",
+                            v,
+                            "[",
+                            this.string(discField),
+                            "]](",
+                            v,
+                            ")",
+                        ]);
+                    }
+
+                    return compose(value, (v) => [
+                        "{",
+                        arrayIntercalate(", ", mappingParts),
+                        "}[",
+                        v,
+                        "[",
+                        this.string(discField),
+                        "]](",
+                        v,
+                        ")",
+                    ]);
+                }
+
                 const deserializers = Array.from(unionType.members).map(
                     (m) => makeLambda(this.deserializer(identity, m)).source,
                 );
@@ -908,14 +955,16 @@ export class JSONPythonRenderer extends PythonRenderer {
                     ")",
                 ]),
             (enumType) =>
-                compose(value, (v) => [
-                    this.conv("to-enum"),
-                    "(",
-                    this.nameForNamedType(enumType),
-                    ", ",
-                    v,
-                    ")",
-                ]),
+                enumType.cases.size === 1
+                    ? value
+                    : compose(value, (v) => [
+                          this.conv("to-enum"),
+                          "(",
+                          this.nameForNamedType(enumType),
+                          ", ",
+                          v,
+                          ")",
+                      ]),
             (unionType) => {
                 const serializers = Array.from(unionType.members).map(
                     (m) => makeLambda(this.serializer(identity, m)).source,

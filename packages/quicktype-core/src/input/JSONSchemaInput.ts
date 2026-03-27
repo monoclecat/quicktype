@@ -1111,7 +1111,7 @@ async function addTypesInSchema(
 
             const objectAttributes = combineTypeAttributes(
                 "union",
-                inferredAttributes,
+                typeAttributes,
                 combineProducedAttributes(({ forObject }) => forObject),
             );
             const order = schema.quicktypePropertyOrder
@@ -1260,7 +1260,7 @@ async function addTypesInSchema(
                 combineProducedAttributes(({ forString }) => forString),
             );
 
-            if (needStringEnum || isConst) {
+            if (needStringEnum || (isConst && typeof schema.const === "string")) {
                 const cases = isConst
                     ? [schema.const]
                     : (enumArray?.filter((x) => typeof x === "string") ?? []);
@@ -1284,7 +1284,7 @@ async function addTypesInSchema(
 
             types.push(
                 typeBuilder.getUniqueUnionType(
-                    inferredAttributes,
+                    typeAttributes,
                     new Set(unionTypes),
                 ),
             );

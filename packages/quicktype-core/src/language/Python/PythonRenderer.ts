@@ -153,6 +153,81 @@ export class PythonRenderer extends ConvenienceRenderer {
         return ["'", name, "'"];
     }
 
+    /**
+     * Detect a discriminator property across union members.
+     * Returns the property name if all members are ClassType and share a
+     * property whose type is a single-case EnumType with distinct values.
+     */
+    protected findDiscriminator(
+        members: ReadonlySet<Type>,
+    ): string | undefined {
+        const classMembers: ClassType[] = [];
+        for (const m of members) {
+            const actual = followTargetType(m);
+            if (actual instanceof ClassType) {
+                classMembers.push(actual);
+            } else {
+                return undefined;
+            }
+        }
+
+        if (classMembers.length < 2) return undefined;
+
+        const firstProps = classMembers[0].getProperties();
+        for (const [propName] of firstProps) {
+            let isDisc = true;
+            const seenValues = new Set<string>();
+            for (const cls of classMembers) {
+                const p = cls.getProperties().get(propName);
+                if (p === undefined) {
+                    isDisc = false;
+                    break;
+                }
+
+                const propType = followTargetType(p.type);
+                if (
+                    !(propType instanceof EnumType) ||
+                    propType.cases.size !== 1
+                ) {
+                    isDisc = false;
+                    break;
+                }
+
+                const val = defined(iterableFirst(propType.cases));
+                if (seenValues.has(val)) {
+                    isDisc = false;
+                    break;
+                }
+
+                seenValues.add(val);
+            }
+
+            if (isDisc && seenValues.size === classMembers.length) {
+                return propName;
+            }
+        }
+
+        return undefined;
+    }
+
+    /**
+     * For a discriminated union, return the (constValue, memberType) pairs.
+     */
+    protected getDiscriminatorEntries(
+        members: ReadonlySet<Type>,
+        discField: string,
+    ): Array<[string, Type]> {
+        const result: Array<[string, Type]> = [];
+        for (const m of members) {
+            const cls = followTargetType(m) as ClassType;
+            const prop = defined(cls.getProperties().get(discField));
+            const enumT = followTargetType(prop.type) as EnumType;
+            result.push([defined(iterableFirst(enumT.cases)), m]);
+        }
+
+        return result;
+    }
+
     protected pythonType(t: Type, _isRootTypeDef = false): Sourcelike {
         const actualType = followTargetType(t);
 
@@ -177,12 +252,53 @@ export class PythonRenderer extends ConvenienceRenderer {
                 this.pythonType(mapType.values),
                 "]",
             ],
-            (enumType) => this.namedType(enumType),
+            (enumType) => {
+                if (enumType.cases.size === 1) {
+                    const value = defined(iterableFirst(enumType.cases));
+                    this.withImport("typing", "Literal");
+                    return ["Literal[", this.string(value), "]"];
+                }
+
+                return this.namedType(enumType);
+            },
             (unionType) => {
                 const [hasNull, nonNulls] = removeNullFromUnion(unionType);
                 const memberTypes = Array.from(nonNulls).map((m) =>
                     this.pythonType(m),
                 );
+
+                // Build the base union expression
+                let unionExpr: Sourcelike;
+                if (this.pyOptions.features.unionSyntax) {
+                    unionExpr = arrayIntercalate(" | ", memberTypes);
+                } else if (nonNulls.size > 1) {
+                    unionExpr = [
+                        this.withTyping("Union"),
+                        "[",
+                        arrayIntercalate(", ", memberTypes),
+                        "]",
+                    ];
+                } else {
+                    unionExpr = defined(iterableFirst(memberTypes));
+                }
+
+                // Wrap with discriminator annotation for pydantic mode
+                const discField = this.findDiscriminator(nonNulls);
+                if (
+                    discField !== undefined &&
+                    this.pyOptions.pydanticBaseModel
+                ) {
+                    this.withImport("typing", "Annotated");
+                    this.withImport("pydantic", "Field");
+                    unionExpr = [
+                        "Annotated[",
+                        unionExpr,
+                        ", ",
+                        "Field(discriminator=",
+                        this.string(discField),
+                        ")]",
+                    ];
+                }
 
                 if (hasNull !== null) {
                     const rest: string[] = [];
@@ -190,52 +306,23 @@ export class PythonRenderer extends ConvenienceRenderer {
                         !this.getAlphabetizeProperties() &&
                         _isRootTypeDef
                     ) {
-                        // Only push "= None" if this is a root level type def
-                        //   otherwise we may get type defs like List[Optional[int] = None]
-                        //   which are invalid
                         rest.push(" = None");
                     }
 
                     if (this.pyOptions.features.unionSyntax) {
-                        // Python 3.10+: X | Y | None
-                        return [
-                            arrayIntercalate(" | ", memberTypes),
-                            " | None",
-                            ...rest,
-                        ];
-                    }
-
-                    if (nonNulls.size > 1) {
-                        this.withImport("typing", "Union");
-                        return [
-                            this.withTyping("Optional"),
-                            "[Union[",
-                            arrayIntercalate(", ", memberTypes),
-                            "]]",
-                            ...rest,
-                        ];
+                        return [unionExpr, " | None", ...rest];
                     }
 
                     return [
                         this.withTyping("Optional"),
                         "[",
-                        defined(iterableFirst(memberTypes)),
+                        unionExpr,
                         "]",
                         ...rest,
                     ];
                 }
 
-                if (this.pyOptions.features.unionSyntax) {
-                    // Python 3.10+: X | Y
-                    return [arrayIntercalate(" | ", memberTypes)];
-                }
-
-                return [
-                    this.withTyping("Union"),
-                    "[",
-                    arrayIntercalate(", ", memberTypes),
-                    "]",
-                ];
+                return [unionExpr];
             },
             (transformedStringType) => {
                 if (transformedStringType.kind === "date-time") {
@@ -381,7 +468,10 @@ export class PythonRenderer extends ConvenienceRenderer {
             this.forEachNamedType(
                 ["interposing", 2],
                 (c: ClassType) => this.emitClass(c),
-                (e) => this.emitEnum(e),
+                (e) => {
+                    if (e.cases.size === 1) return;
+                    this.emitEnum(e);
+                },
                 (_u) => {
                     return;
                 },
